@@ -1,4 +1,4 @@
-.PHONY: help install dev api dashboard test fmt compose-up compose-down
+.PHONY: help install dev api dashboard worker test fmt compose-up compose-down
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +19,9 @@ api:  ## sobe a API em http://localhost:8000
 
 dashboard:  ## sobe o painel em http://localhost:8501
 	.venv/bin/streamlit run dashboard/streamlit_app.py
+
+worker:  ## sobe o worker local (substitui o n8n) em :9000
+	.venv/bin/python scripts/worker_local.py
 
 test:  ## roda os testes
 	.venv/bin/pytest -q

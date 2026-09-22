@@ -26,6 +26,23 @@ exemplo. Sem `N8N_WEBHOOK_URL` configurada os jobs caem em `erro` na etapa
 `dispatch`, visíveis e reprocessáveis pelo painel: dá para exercitar a API e o
 dashboard inteiros antes do n8n existir.
 
+## Testar o pipeline sem n8n
+
+`scripts/worker_local.py` implementa o mesmo contrato do workflow: recebe o
+webhook assinado, roda `yt-dlp -> ffmpeg -> faster-whisper -> Groq -> carrossel`
+e devolve os `PATCH`. Serve para ver o fluxo real antes de montar o n8n.
+
+```bash
+# no .env:  N8N_WEBHOOK_URL=http://127.0.0.1:9000/webhook
+make worker      # terceiro terminal
+```
+
+Agora é só colar a URL no painel. Precisa de `yt-dlp` e `ffmpeg` no PATH — o
+worker se recusa a subir sem eles e diz qual falta. `GROQ_API_KEY` e
+`CARROSSEL_WEBHOOK_URL` são opcionais: sem a primeira o job termina na
+transcrição, sem a segunda termina nos slides, e o painel mostra em qual etapa
+parou.
+
 ## Subir completo (Postgres + n8n)
 
 ```bash
@@ -134,7 +151,7 @@ Os que importam: `DATABASE_URL`, `API_KEY`, `WORKER_SECRET`,
 ## Testes
 
 ```bash
-make test        # 58 testes
+make test        # 72 testes
 ```
 
 Cobrem validação de URL, autenticação nos dois níveis, exigência de segredos
