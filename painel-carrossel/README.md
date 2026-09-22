@@ -26,6 +26,36 @@ exemplo. Sem `N8N_WEBHOOK_URL` configurada os jobs caem em `erro` na etapa
 `dispatch`, visíveis e reprocessáveis pelo painel: dá para exercitar a API e o
 dashboard inteiros antes do n8n existir.
 
+## Criar um carrossel
+
+Com a API e o dashboard no ar, dá pra criar um job de duas formas:
+
+**Pelo dashboard** — abra http://localhost:8501, cole uma ou mais URLs do
+Instagram/TikTok (uma por linha) em "Novo job" e clique em "Transcrever e
+gerar carrossel". O job cai na tabela; escolha-o em "Detalhe" pra acompanhar
+etapa, transcrição, slides e o link do carrossel quando terminar — o botão
+"Reprocessar" reenfileira se der `erro`.
+
+**Pela API** — cria o job:
+
+```bash
+curl -X POST localhost:8000/jobs \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"url": "https://www.instagram.com/reel/XXXXXXXXXXX/"}'
+# -> {"criados": [{"id": "...", "status": "pendente", ...}], "rejeitados": []}
+```
+
+e acompanha pelo `id` devolvido até `status` virar `concluido` (ou `erro`):
+
+```bash
+curl localhost:8000/jobs/<id> -H "X-API-Key: $API_KEY"
+# -> {"status": "concluido", "carousel_url": "...", "transcript": "...", ...}
+```
+
+Sem worker nenhum rodando (nem n8n, nem `make worker` da seção abaixo) o job
+fica parado em `erro` na etapa `dispatch` — é o comportamento esperado até
+ter um dos dois no ar.
+
 ## Testar o pipeline sem n8n
 
 `scripts/worker_local.py` implementa o mesmo contrato do workflow: recebe o
