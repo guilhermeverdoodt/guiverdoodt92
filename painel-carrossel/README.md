@@ -151,7 +151,7 @@ Os que importam: `DATABASE_URL`, `API_KEY`, `WORKER_SECRET`,
 ## Testes
 
 ```bash
-make test        # 72 testes
+make test        # 80 testes
 ```
 
 Cobrem validação de URL, autenticação nos dois níveis, exigência de segredos
