@@ -102,3 +102,36 @@ def test_comando_ausente_vira_etapa_falhou():
 def test_codigo_de_saida_nao_zero_vira_etapa_falhou():
     with pytest.raises(worker.EtapaFalhou, match="codigo 3"):
         worker._rodar(["sh", "-c", "echo falhou >&2; exit 3"], worker.Etapa.AUDIO)
+
+
+# --------------------- injecao de argumento --------------------- #
+@pytest.mark.parametrize(
+    "url",
+    [
+        "--exec=echo pwned",
+        "-o/tmp/qualquer",
+        "file:///etc/passwd",
+        "ftp://exemplo/x",
+        "",
+    ],
+)
+def test_url_nao_http_e_recusada(url):
+    assert not worker.url_segura(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://www.instagram.com/reel/Abc/", "http://localhost:8000/x"],
+)
+def test_url_http_e_aceita(url):
+    assert worker.url_segura(url)
+
+
+def test_baixar_video_recusa_url_perigosa(tmp_path):
+    """A URL vira argumento do yt-dlp: nao pode comecar com hifen."""
+    with pytest.raises(worker.EtapaFalhou) as info:
+        worker.baixar_video("--exec=echo pwned", tmp_path / "job")
+    assert info.value.etapa == "download"
+    assert "recusada" in str(info.value)
+    # nada foi criado: falhou antes de chamar o yt-dlp
+    assert not (tmp_path / "job").exists()

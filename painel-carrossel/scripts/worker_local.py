@@ -138,6 +138,14 @@ class Painel:
 # Etapas do pipeline
 # --------------------------------------------------------------------------- #
 def _rodar(cmd: list[str], etapa: str, timeout: int = 900) -> str:
+    """Executa um comando como lista de argumentos.
+
+    Sempre sem shell (`shell=False`, o padrao): os argumentos vao direto para
+    execve, entao metacaractere de shell em uma URL e literal, nao comando.
+    O que ainda seria possivel e injecao de *argumento* — uma URL comecando
+    com `-` virar opcao do yt-dlp — e por isso `baixar_video` valida o
+    esquema e passa `--` antes do posicional.
+    """
     log.info("[%s] %s", etapa, " ".join(cmd[:4]) + (" ..." if len(cmd) > 4 else ""))
     try:
         proc = subprocess.run(
@@ -154,7 +162,15 @@ def _rodar(cmd: list[str], etapa: str, timeout: int = 900) -> str:
     return proc.stdout
 
 
+def url_segura(url: str) -> bool:
+    """So http(s). Barra `-opcao`, `file://` e afins antes de virar argumento."""
+    return url.startswith(("http://", "https://"))
+
+
 def baixar_video(url: str, destino: Path) -> Path:
+    if not url_segura(url):
+        raise EtapaFalhou(Etapa.DOWNLOAD, f"URL recusada pelo worker: {url[:120]!r}")
+
     destino.mkdir(parents=True, exist_ok=True)
     _rodar(
         [
@@ -164,6 +180,9 @@ def baixar_video(url: str, destino: Path) -> Path:
             "--no-warnings",
             "-o",
             str(destino / "video.%(ext)s"),
+            # `--` encerra as opcoes: o que vem depois e sempre posicional,
+            # mesmo que comece com hifen.
+            "--",
             url,
         ],
         Etapa.DOWNLOAD,
@@ -179,9 +198,11 @@ def extrair_audio(video: Path) -> Path:
     _rodar(
         [
             "ffmpeg", "-y", "-loglevel", "error",
-            "-i", str(video),
+            # absoluto de proposito: um caminho relativo iniciado por hifen
+            # seria lido como opcao pelo ffmpeg
+            "-i", str(video.resolve()),
             "-vn", "-ac", "1", "-ar", "16000",
-            str(audio),
+            str(audio.resolve()),
         ],
         Etapa.AUDIO,
     )
