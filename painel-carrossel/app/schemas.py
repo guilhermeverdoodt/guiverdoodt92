@@ -17,8 +17,10 @@ class JobCreate(BaseModel):
 
     @model_validator(mode="after")
     def _pelo_menos_uma(self) -> "JobCreate":
-        if not self.url and not self.urls:
-            raise ValueError("Informe 'url' ou 'urls'.")
+        # checa o resultado de todas_urls(), nao os campos crus: um lote so com
+        # linhas em branco ("urls": ["  "]) passaria e criaria zero jobs com 201.
+        if not self.todas_urls():
+            raise ValueError("Informe ao menos uma URL nao vazia em 'url' ou 'urls'.")
         return self
 
     def todas_urls(self) -> list[str]:
@@ -81,6 +83,10 @@ class JobCreateOut(BaseModel):
 class JobPatch(BaseModel):
     """Callback do n8n. Todos os campos sao opcionais — o worker manda o que tem."""
 
+    # Numero da tentativa que o worker recebeu no webhook. Quando vem
+    # preenchido, a API recusa o callback se nao for a tentativa corrente —
+    # e o que impede uma execucao atrasada de sobrescrever o retry.
+    attempt: int | None = None
     status: JobStatus | None = None
     etapa: Etapa | None = None
     transcript: str | None = None

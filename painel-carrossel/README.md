@@ -21,9 +21,10 @@ make api              # http://localhost:8000/docs
 make dashboard        # http://localhost:8501   (outro terminal)
 ```
 
-Sem `N8N_WEBHOOK_URL` configurada os jobs ficam em `pendente` e o histórico
-registra o aviso — dá para exercitar a API e o painel inteiros antes do n8n
-existir.
+`make install` gera os segredos sozinho — a API se recusa a subir com valor de
+exemplo. Sem `N8N_WEBHOOK_URL` configurada os jobs caem em `erro` na etapa
+`dispatch`, visíveis e reprocessáveis pelo painel: dá para exercitar a API e o
+dashboard inteiros antes do n8n existir.
 
 ## Subir completo (Postgres + n8n)
 
@@ -82,9 +83,15 @@ assinado em `X-Signature: sha256=<hmac do corpo>`. O worker responde com
 `PATCH callback_url` a cada etapa:
 
 ```json
-{ "status": "processando", "etapa": "transcricao", "transcript": "...",
-  "slides_json": {...}, "carousel_url": "...", "error": null, "mensagem": "..." }
+{ "attempt": 0, "status": "processando", "etapa": "transcricao",
+  "transcript": "...", "slides_json": {...}, "carousel_url": "...",
+  "error": null, "mensagem": "..." }
 ```
+
+`attempt` é o `attempts` que veio no webhook. Se não for a tentativa corrente,
+a API responde `409` e descarta — é o que impede uma execução lenta de
+sobrescrever o que um retry já gravou. Workers que não mandam o campo
+continuam funcionando.
 
 Todo PATCH grava uma linha em `job_events` — é o histórico que o painel mostra
 e o que responde "qual etapa quebrou" quando o `yt-dlp` cai.
@@ -127,12 +134,13 @@ Os que importam: `DATABASE_URL`, `API_KEY`, `WORKER_SECRET`,
 ## Testes
 
 ```bash
-make test        # 38 testes
+make test        # 58 testes
 ```
 
-Cobrem validação de URL, autenticação nos dois níveis, criação em lote,
-filtros, o fluxo completo de PATCH, as regras de retry e o comportamento
-quando o n8n está fora do ar.
+Cobrem validação de URL, autenticação nos dois níveis, exigência de segredos
+próprios, criação em lote, filtros, o fluxo completo de PATCH, as regras de
+retry, o descarte de callback obsoleto e o comportamento quando o n8n está
+fora do ar.
 
 ## Pontos de atenção herdados da arquitetura
 

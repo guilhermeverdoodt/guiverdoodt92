@@ -47,3 +47,30 @@ def test_validar_normaliza_espacos():
     url, plataforma = validar_url("  https://www.instagram.com/reel/Cx1y2z3AbCd/  ")
     assert url == "https://www.instagram.com/reel/Cx1y2z3AbCd/"
     assert plataforma is Plataforma.instagram
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.tiktok.com/explore",
+        "https://www.tiktok.com/foryou",
+        "https://www.tiktok.com/@usuario",
+    ],
+)
+def test_tiktok_sem_video_e_rejeitado(url):
+    """O slug generico so vale para encurtador; no dominio principal, nao."""
+    with pytest.raises(URLInvalida, match="sem video"):
+        validar_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://vm.tiktok.com/ZMabcdefg/",
+        "https://vt.tiktok.com/ZSxyzwvut",
+        "https://www.tiktok.com/@usuario/video/7300000000000000000",
+        "https://www.tiktok.com/t/ZTabc123/",
+    ],
+)
+def test_tiktok_formatos_validos(url):
+    assert validar_url(url)[1] is Plataforma.tiktok

@@ -75,5 +75,6 @@ O `Marcar concluído` lê `carousel_url` ou `url` da resposta.
 
 O contrato é só o webhook: `POST` com `{job_id, url, plataforma, attempts,
 callback_url}` assinado em `X-Signature`, e `PATCH callback_url` com
-`X-Worker-Secret`. Qualquer worker que respeite isso substitui o n8n sem tocar
+`X-Worker-Secret` devolvendo `attempt` com o valor recebido em `attempts`
+(a API descarta com 409 o callback de uma tentativa que não é mais a atual). Qualquer worker que respeite isso substitui o n8n sem tocar
 na API nem no dashboard.

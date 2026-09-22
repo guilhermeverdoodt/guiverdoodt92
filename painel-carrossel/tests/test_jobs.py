@@ -88,8 +88,51 @@ def test_lista_filtra_por_status_e_plataforma(client):
 
 def test_stats(client, job_id):
     corpo = client.get("/jobs/stats", headers=API_HEADERS).json()
-    assert corpo["pendente"] == 1
+    # sem N8N_WEBHOOK_URL o disparo falha, entao o job nasce e cai em erro
+    assert corpo["erro"] == 1
     assert corpo["total"] == 1
+
+
+def test_lote_so_com_linhas_vazias_e_rejeitado(client):
+    """Antes passava na validacao e devolvia 201 com zero jobs criados."""
+    for corpo in ({"urls": ["  ", ""]}, {"url": "   "}, {"urls": []}):
+        resposta = client.post("/jobs", json=corpo, headers=API_HEADERS)
+        assert resposta.status_code == 422, corpo
+
+
+def test_callback_de_tentativa_antiga_e_descartado(client, job_id):
+    # tentativa 0 falha e o painel reprocessa -> tentativa 1
+    client.patch(f"/jobs/{job_id}", json={"error": "falhou"}, headers=WORKER_HEADERS)
+    client.post(f"/jobs/{job_id}/retry", headers=API_HEADERS)
+
+    # execucao antiga termina atrasada e tenta sobrescrever
+    atrasado = client.patch(
+        f"/jobs/{job_id}",
+        json={"attempt": 0, "status": "concluido", "carousel_url": "https://antigo"},
+        headers=WORKER_HEADERS,
+    )
+    assert atrasado.status_code == 409
+
+    job = client.get(f"/jobs/{job_id}", headers=API_HEADERS).json()
+    assert job["carousel_url"] is None
+    assert job["attempts"] == 1
+
+    # a tentativa corrente passa normalmente
+    atual = client.patch(
+        f"/jobs/{job_id}",
+        json={"attempt": 1, "status": "concluido", "carousel_url": "https://novo"},
+        headers=WORKER_HEADERS,
+    )
+    assert atual.status_code == 200
+    assert atual.json()["carousel_url"] == "https://novo"
+
+
+def test_callback_sem_attempt_continua_aceito(client, job_id):
+    """Compatibilidade: worker que nao manda `attempt` segue funcionando."""
+    resposta = client.patch(
+        f"/jobs/{job_id}", json={"status": "processando"}, headers=WORKER_HEADERS
+    )
+    assert resposta.status_code == 200
 
 
 def test_fluxo_completo_via_patch(client, job_id):

@@ -46,7 +46,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"status\":\"processando\",\"etapa\":\"download\",\"mensagem\":\"n8n assumiu o job\"}",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"status\":\"processando\",\"etapa\":\"download\",\"mensagem\":\"n8n assumiu o job\"}",
         "options": {
           "timeout": 15000
         }
@@ -90,7 +90,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"etapa\":\"audio\",\"mensagem\":\"video baixado\"}",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"audio\",\"mensagem\":\"video baixado\"}",
         "options": {
           "timeout": 15000
         }
@@ -134,7 +134,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"etapa\":\"transcricao\",\"mensagem\":\"audio extraido\"}",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"transcricao\",\"mensagem\":\"audio extraido\"}",
         "options": {
           "timeout": 15000
         }
@@ -192,7 +192,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"etapa\":\"slides\",\"transcript\":{{ JSON.stringify($json.text) }},\"mensagem\":\"transcricao concluida\"}",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"slides\",\"transcript\":{{ JSON.stringify($json.text) }},\"mensagem\":\"transcricao concluida\"}",
         "options": {
           "timeout": 15000
         }
@@ -266,7 +266,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"etapa\":\"carrossel\",\"slides_json\":{{ JSON.stringify($json) }},\"mensagem\":\"slides estruturados\"}",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"carrossel\",\"slides_json\":{{ JSON.stringify($json) }},\"mensagem\":\"slides estruturados\"}",
         "options": {
           "timeout": 15000
         }
@@ -326,7 +326,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"status\":\"concluido\",\"etapa\":\"carrossel\",\"carousel_url\":\"{{ $json.carousel_url || $json.url || '' }}\",\"mensagem\":\"carrossel gerado\"}",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"status\":\"concluido\",\"etapa\":\"carrossel\",\"carousel_url\":\"{{ $json.carousel_url || $json.url || '' }}\",\"mensagem\":\"carrossel gerado\"}",
         "options": {
           "timeout": 15000
         }
@@ -357,7 +357,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Recebe a saida de erro de qualquer no do pipeline e traduz para o\n// vocabulario da API ($prevNode diz qual no mandou o item para ca).\nconst MAPA_ETAPAS = {\n  'Download (yt-dlp)': 'download',\n  'Extrair audio (ffmpeg)': 'audio',\n  'Transcrever (faster-whisper)': 'transcricao',\n  'Ler transcricao': 'transcricao',\n  'Salvar transcricao': 'transcricao',\n  'Estruturar slides (Groq)': 'slides',\n  'Normalizar slides': 'slides',\n  'Salvar slides': 'slides',\n  'Gerar carrossel': 'carrossel',\n  'Marcar concluido': 'carrossel',\n};\n\nconst noFalho = $prevNode.name;\nconst item = $input.first().json;\nconst mensagem =\n  item.error?.message || item.error || item.message || JSON.stringify(item).slice(0, 500);\n\nconst webhook = $('Webhook Painel').first().json.body;\n\nreturn [{ json: {\n  job_id: webhook.job_id,\n  callback_url: webhook.callback_url,\n  etapa: MAPA_ETAPAS[noFalho] || 'dispatch',\n  error: `[${noFalho}] ${String(mensagem).slice(0, 2000)}`,\n} }];"
+        "jsCode": "// Recebe a saida de erro de qualquer no do pipeline e traduz para o\n// vocabulario da API ($prevNode diz qual no mandou o item para ca).\nconst MAPA_ETAPAS = {\n  'Download (yt-dlp)': 'download',\n  'Extrair audio (ffmpeg)': 'audio',\n  'Transcrever (faster-whisper)': 'transcricao',\n  'Ler transcricao': 'transcricao',\n  'Salvar transcricao': 'transcricao',\n  'Estruturar slides (Groq)': 'slides',\n  'Normalizar slides': 'slides',\n  'Salvar slides': 'slides',\n  'Gerar carrossel': 'carrossel',\n  'Marcar concluido': 'carrossel',\n};\n\nconst noFalho = $prevNode.name;\nconst item = $input.first().json;\nconst mensagem =\n  item.error?.message || item.error || item.message || JSON.stringify(item).slice(0, 500);\n\nconst webhook = $('Webhook Painel').first().json.body;\n\nreturn [{ json: {\n  job_id: webhook.job_id,\n  attempt: webhook.attempts,\n  callback_url: webhook.callback_url,\n  etapa: MAPA_ETAPAS[noFalho] || 'dispatch',\n  error: `[${noFalho}] ${String(mensagem).slice(0, 2000)}`,\n} }];"
       },
       "id": "montar-erro",
       "name": "Montar erro",
@@ -383,7 +383,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"status\":\"erro\",\"etapa\":\"{{ $json.etapa }}\",\"error\":{{ JSON.stringify($json.error) }}}",
+        "jsonBody": "={\"attempt\":{{ $json.attempt }},\"status\":\"erro\",\"etapa\":\"{{ $json.etapa }}\",\"error\":{{ JSON.stringify($json.error) }}}",
         "options": {
           "timeout": 15000
         }

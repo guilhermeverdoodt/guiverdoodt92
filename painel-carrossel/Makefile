@@ -7,7 +7,12 @@ install:  ## cria o venv e instala as dependencias de dev
 	python3 -m venv .venv
 	.venv/bin/pip install -U pip
 	.venv/bin/pip install -r requirements-dev.txt
-	@test -f .env || cp .env.example .env
+	@test -f .env || { \
+		sed -e "s|^API_KEY=.*|API_KEY=$$(openssl rand -hex 32)|" \
+		    -e "s|^WORKER_SECRET=.*|WORKER_SECRET=$$(openssl rand -hex 32)|" \
+		    .env.example > .env; \
+		echo "criado .env com segredos gerados"; \
+	}
 
 api:  ## sobe a API em http://localhost:8000
 	.venv/bin/uvicorn app.main:app --reload --port 8000

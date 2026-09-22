@@ -22,10 +22,8 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     if not settings.n8n_webhook_url:
         logger.warning(
-            "N8N_WEBHOOK_URL nao configurada: os jobs ficarao pendentes ate o worker existir."
+            "N8N_WEBHOOK_URL nao configurada: todo job criado vai falhar na etapa dispatch."
         )
-    if settings.api_key == "dev-api-key" or settings.worker_secret == "dev-worker-secret":
-        logger.warning("Segredos padrao em uso — troque API_KEY e WORKER_SECRET no .env.")
     yield
 
 

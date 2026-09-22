@@ -15,9 +15,17 @@ _TIKTOK_HOSTS = {
     "vt.tiktok.com",
 }
 
-# Instagram: /p/, /reel/, /reels/, /tv/  |  TikTok: /@user/video/123, /v/123
+# Instagram: /p/, /reel/, /reels/, /tv/
 _INSTAGRAM_PATH = re.compile(r"^/(p|reel|reels|tv)/[\w\-]+", re.IGNORECASE)
-_TIKTOK_PATH = re.compile(r"^/(@[\w.\-]+/(video|photo)/\d+|v/\d+|t/\w+|\w{5,})", re.IGNORECASE)
+
+# TikTok no dominio principal: so os formatos que identificam um video.
+_TIKTOK_PATH = re.compile(r"^/(@[\w.\-]+/(video|photo)/\d+|v/\d+|t/\w+)", re.IGNORECASE)
+
+# Encurtadores (vm./vt./m.) usam um slug opaco: /ZMabcdefg/. So ali o slug
+# generico e aceito — no dominio principal ele deixaria passar /explore,
+# /foryou e qualquer outro caminho que nao e video.
+_TIKTOK_SHORT_HOSTS = {"vm.tiktok.com", "vt.tiktok.com", "m.tiktok.com"}
+_TIKTOK_SHORT_PATH = re.compile(r"^/[\w\-]{5,}/?$", re.IGNORECASE)
 
 
 class URLInvalida(ValueError):
@@ -61,7 +69,10 @@ def validar_url(url: str) -> tuple[str, Plataforma]:
         raise URLInvalida(
             f"URL do Instagram sem post/reel identificavel: {url!r}"
         )
-    if plataforma is Plataforma.tiktok and not _TIKTOK_PATH.match(path):
-        raise URLInvalida(f"URL do TikTok sem video identificavel: {url!r}")
+    if plataforma is Plataforma.tiktok:
+        host = parsed.netloc.lower()
+        curta = host in _TIKTOK_SHORT_HOSTS and _TIKTOK_SHORT_PATH.match(path)
+        if not curta and not _TIKTOK_PATH.match(path):
+            raise URLInvalida(f"URL do TikTok sem video identificavel: {url!r}")
 
     return url, plataforma

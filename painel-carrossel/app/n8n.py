@@ -48,15 +48,21 @@ def disparar_job(db: Session, job: Job) -> None:
     settings = get_settings()
 
     if not settings.n8n_webhook_url:
+        # Tratado como falha de disparo, nao como "pendente": um job pendente
+        # nunca e reprocessavel pelo painel e ficaria preso para sempre se o
+        # n8n so fosse configurado depois.
+        job.status = JobStatus.erro.value
+        job.etapa = Etapa.dispatch.value
+        job.error = "N8N_WEBHOOK_URL nao configurada — nada foi disparado."
         registrar_evento(
             db,
             job,
             etapa=Etapa.dispatch,
-            status=JobStatus(job.status),
-            mensagem="N8N_WEBHOOK_URL nao configurada — job criado sem disparo.",
+            status=JobStatus.erro,
+            mensagem=job.error,
         )
         db.commit()
-        logger.warning("N8N_WEBHOOK_URL vazia; job %s ficou pendente.", job.id)
+        logger.warning("N8N_WEBHOOK_URL vazia; job %s marcado como erro.", job.id)
         return
 
     payload = montar_payload(job)

@@ -21,8 +21,13 @@ class PainelAPI:
 
     def _request(self, metodo: str, caminho: str, **kwargs) -> Any:
         url = f"{self.base_url}{caminho}"
-        with httpx.Client(timeout=self._timeout) as client:
-            resposta = client.request(metodo, url, headers=self._headers, **kwargs)
+        try:
+            with httpx.Client(timeout=self._timeout) as client:
+                resposta = client.request(metodo, url, headers=self._headers, **kwargs)
+        except httpx.HTTPError as exc:
+            # Normaliza falha de transporte (API fora do ar, timeout, DNS) em
+            # APIError, para o painel mostrar um aviso em vez de um traceback.
+            raise APIError(0, f"API inacessivel: {exc}") from exc
         if resposta.status_code >= 400:
             try:
                 detalhe = resposta.json().get("detail", resposta.text)

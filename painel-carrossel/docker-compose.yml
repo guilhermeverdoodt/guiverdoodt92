@@ -52,7 +52,7 @@ services:
       # necessario para os nos lerem $env (segredo, chave da Groq, etc.)
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       PAINEL_API_URL: http://api:8000
-      PAINEL_WORKER_SECRET: ${WORKER_SECRET:-dev-worker-secret}
+      PAINEL_WORKER_SECRET: ${WORKER_SECRET:?defina WORKER_SECRET no .env}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
       CARROSSEL_WEBHOOK_URL: ${CARROSSEL_WEBHOOK_URL:-}

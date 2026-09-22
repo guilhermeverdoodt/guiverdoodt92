@@ -157,6 +157,18 @@ def atualizar_job(
     if job is None:
         raise HTTPException(status_code=404, detail="Job nao encontrado")
 
+    # Uma execucao antiga que termina depois de um retry nao pode sobrescrever
+    # o que a tentativa nova ja gravou. Workers que nao mandam `attempt`
+    # continuam funcionando — a checagem so vale quando o campo vem.
+    if payload.attempt is not None and payload.attempt != job.attempts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Callback da tentativa {payload.attempt}, mas a atual e "
+                f"{job.attempts} — atualizacao descartada."
+            ),
+        )
+
     crud.aplicar_patch(
         db,
         job,
