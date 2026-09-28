@@ -1,0 +1,15 @@
+._*
+node_modules/
+.env
+.env.local
+.env.*.local
+.env.production
+.DS_Store
+.cache/
+.next/
+.claude/worktrees/
+.worktrees/
+.playwright-mcp/
+.expo/
+__pycache__/
+.venv/
