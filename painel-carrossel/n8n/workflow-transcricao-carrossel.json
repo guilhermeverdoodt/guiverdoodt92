@@ -1,0 +1,681 @@
+{
+  "name": "Painel — Transcricao e Carrossel",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "painel-carrossel",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-painel",
+      "name": "Webhook Painel",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        300
+      ],
+      "webhookId": "painel-carrossel"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida a assinatura HMAC enviada pela API (header X-Signature).\n// Sem isso o webhook do n8n seria um endpoint aberto.\nconst crypto = require('crypto');\n\nconst entrada = $input.first().json;\nconst segredo = $env.PAINEL_WORKER_SECRET;\nif (!segredo) {\n  throw new Error('PAINEL_WORKER_SECRET nao definido no ambiente do n8n.');\n}\n\nconst recebida = entrada.headers['x-signature'] || '';\nconst corpo = JSON.stringify(entrada.body);\nconst esperada = 'sha256=' + crypto.createHmac('sha256', segredo).update(corpo, 'utf8').digest('hex');\n\nconst a = Buffer.from(recebida);\nconst b = Buffer.from(esperada);\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {\n  throw new Error('Assinatura invalida — requisicao rejeitada.');\n}\nif (!entrada.body.job_id || !entrada.body.url || !entrada.body.callback_url) {\n  throw new Error('Payload incompleto: faltam job_id, url ou callback_url.');\n}\n\nreturn [{ json: entrada.body }];"
+      },
+      "id": "validar-assinatura",
+      "name": "Validar assinatura",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook Painel').first().json.body.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"status\":\"processando\",\"etapa\":\"download\",\"mensagem\":\"n8n assumiu o job\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "marcar-processando",
+      "name": "Marcar processando",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=set -e; mkdir -p /data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}; yt-dlp --no-playlist --no-progress --no-warnings -o '/data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}/video.%(ext)s' \"{{ $('Webhook Painel').first().json.body.url }}\""
+      },
+      "id": "download-yt-dlp",
+      "name": "Download (yt-dlp)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        60,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook Painel').first().json.body.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"audio\",\"mensagem\":\"video baixado\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "marcar-audio",
+      "name": "Marcar audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=set -e; ffmpeg -y -loglevel error -i \"$(ls /data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}/video.* | head -n1)\" -vn -ac 1 -ar 16000 /data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}/audio.wav"
+      },
+      "id": "extrair-audio-ffmpeg",
+      "name": "Extrair audio (ffmpeg)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook Painel').first().json.body.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"transcricao\",\"mensagem\":\"audio extraido\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "marcar-transcricao",
+      "name": "Marcar transcricao",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=python3 /opt/painel/scripts/transcrever.py /data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}/audio.wav"
+      },
+      "id": "transcrever-faster-whisper",
+      "name": "Transcrever (faster-whisper)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        940,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// O Execute Command devolve stdout como string; transcrever.py imprime JSON.\nconst stdout = $input.first().json.stdout || '';\nlet dados;\ntry {\n  dados = JSON.parse(stdout);\n} catch (e) {\n  throw new Error('Saida da transcricao nao e JSON: ' + stdout.slice(0, 500));\n}\nif (dados.error) {\n  throw new Error('Transcricao falhou: ' + dados.error);\n}\nif (!dados.text || !dados.text.trim()) {\n  throw new Error('Transcricao vazia — video sem fala ou audio corrompido.');\n}\nreturn [{ json: dados }];"
+      },
+      "id": "ler-transcricao",
+      "name": "Ler transcricao",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook Painel').first().json.body.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"slides\",\"transcript\":{{ JSON.stringify($json.text) }},\"mensagem\":\"transcricao concluida\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "salvar-transcricao",
+      "name": "Salvar transcricao",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"{{ $env.GROQ_MODEL || 'llama-3.3-70b-versatile' }}\",\n  \"temperature\": 0.4,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"Voce transforma a transcricao de um video curto (Reels/TikTok) em um carrossel para Instagram. Responda SOMENTE com JSON valido no formato: {\\\"titulo\\\": \\\"gancho curto para o slide 1\\\", \\\"slides\\\": [{\\\"n\\\": 1, \\\"titulo\\\": \\\"...\\\", \\\"texto\\\": \\\"ate 220 caracteres\\\"}], \\\"cta\\\": \\\"chamada final\\\", \\\"legenda\\\": \\\"legenda do post\\\", \\\"hashtags\\\": [\\\"#...\\\"]}. Gere entre 5 e 8 slides, em portugues do Brasil, mantendo o tom e os argumentos do video. Nao invente dados.\" },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify($('Ler transcricao').first().json.text) }} }\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "estruturar-slides-groq",
+      "name": "Estruturar slides (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Groq responde no formato OpenAI; o conteudo vem como string JSON.\nconst resposta = $input.first().json;\nconst bruto = resposta.choices?.[0]?.message?.content;\nif (!bruto) {\n  throw new Error('Groq nao devolveu conteudo: ' + JSON.stringify(resposta).slice(0, 500));\n}\n\nlet slides;\ntry {\n  slides = typeof bruto === 'string' ? JSON.parse(bruto) : bruto;\n} catch (e) {\n  throw new Error('Slides nao vieram em JSON valido: ' + String(bruto).slice(0, 500));\n}\nif (!Array.isArray(slides.slides) || slides.slides.length === 0) {\n  throw new Error('Estrutura de slides invalida: falta o array \"slides\".');\n}\nreturn [{ json: slides }];"
+      },
+      "id": "normalizar-slides",
+      "name": "Normalizar slides",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook Painel').first().json.body.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"etapa\":\"carrossel\",\"slides_json\":{{ JSON.stringify($json) }},\"mensagem\":\"slides estruturados\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "salvar-slides",
+      "name": "Salvar slides",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2040,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CARROSSEL_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.CARROSSEL_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"job_id\":\"{{ $('Webhook Painel').first().json.body.job_id }}\",\"slides\":{{ JSON.stringify($('Normalizar slides').first().json) }}}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "gerar-carrossel",
+      "name": "Gerar carrossel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2260,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook Painel').first().json.body.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $('Webhook Painel').first().json.body.attempts }},\"status\":\"concluido\",\"etapa\":\"carrossel\",\"carousel_url\":\"{{ $json.carousel_url || $json.url || '' }}\",\"mensagem\":\"carrossel gerado\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "marcar-concluido",
+      "name": "Marcar concluido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2480,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "command": "=rm -rf /data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}"
+      },
+      "id": "limpar-arquivos",
+      "name": "Limpar arquivos",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2700,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe a saida de erro de qualquer no do pipeline e traduz para o\n// vocabulario da API ($prevNode diz qual no mandou o item para ca).\nconst MAPA_ETAPAS = {\n  'Download (yt-dlp)': 'download',\n  'Extrair audio (ffmpeg)': 'audio',\n  'Transcrever (faster-whisper)': 'transcricao',\n  'Ler transcricao': 'transcricao',\n  'Salvar transcricao': 'transcricao',\n  'Estruturar slides (Groq)': 'slides',\n  'Normalizar slides': 'slides',\n  'Salvar slides': 'slides',\n  'Gerar carrossel': 'carrossel',\n  'Marcar concluido': 'carrossel',\n};\n\nconst noFalho = $prevNode.name;\nconst item = $input.first().json;\nconst mensagem =\n  item.error?.message || item.error || item.message || JSON.stringify(item).slice(0, 500);\n\nconst webhook = $('Webhook Painel').first().json.body;\n\nreturn [{ json: {\n  job_id: webhook.job_id,\n  attempt: webhook.attempts,\n  callback_url: webhook.callback_url,\n  etapa: MAPA_ETAPAS[noFalho] || 'dispatch',\n  error: `[${noFalho}] ${String(mensagem).slice(0, 2000)}`,\n} }];"
+      },
+      "id": "montar-erro",
+      "name": "Montar erro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Worker-Secret",
+              "value": "={{ $env.PAINEL_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"attempt\":{{ $json.attempt }},\"status\":\"erro\",\"etapa\":\"{{ $json.etapa }}\",\"error\":{{ JSON.stringify($json.error) }}}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "marcar-erro",
+      "name": "Marcar erro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        640
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=rm -rf /data/jobs/{{ $('Webhook Painel').first().json.body.job_id }}"
+      },
+      "id": "limpar-apos-erro",
+      "name": "Limpar apos erro",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        640
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook Painel": {
+      "main": [
+        [
+          {
+            "node": "Validar assinatura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar assinatura": {
+      "main": [
+        [
+          {
+            "node": "Marcar processando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar processando": {
+      "main": [
+        [
+          {
+            "node": "Download (yt-dlp)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download (yt-dlp)": {
+      "main": [
+        [
+          {
+            "node": "Marcar audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar audio": {
+      "main": [
+        [
+          {
+            "node": "Extrair audio (ffmpeg)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair audio (ffmpeg)": {
+      "main": [
+        [
+          {
+            "node": "Marcar transcricao",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar transcricao": {
+      "main": [
+        [
+          {
+            "node": "Transcrever (faster-whisper)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcrever (faster-whisper)": {
+      "main": [
+        [
+          {
+            "node": "Ler transcricao",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler transcricao": {
+      "main": [
+        [
+          {
+            "node": "Salvar transcricao",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar transcricao": {
+      "main": [
+        [
+          {
+            "node": "Estruturar slides (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estruturar slides (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Normalizar slides",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar slides": {
+      "main": [
+        [
+          {
+            "node": "Salvar slides",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar slides": {
+      "main": [
+        [
+          {
+            "node": "Gerar carrossel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar carrossel": {
+      "main": [
+        [
+          {
+            "node": "Marcar concluido",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar concluido": {
+      "main": [
+        [
+          {
+            "node": "Limpar arquivos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Montar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar erro": {
+      "main": [
+        [
+          {
+            "node": "Marcar erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar erro": {
+      "main": [
+        [
+          {
+            "node": "Limpar apos erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "tags": []
+}

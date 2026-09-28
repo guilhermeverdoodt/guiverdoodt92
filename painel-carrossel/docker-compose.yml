@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: painel
+      POSTGRES_PASSWORD: painel
+      POSTGRES_DB: painel
+    volumes:
+      - dados_postgres:/var/lib/postgresql/data
+      - ./migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U painel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://painel:painel@db:5432/painel
+      API_BASE_URL: http://api:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build: .
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+    command: >
+      streamlit run dashboard/streamlit_app.py
+      --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - api
+    ports:
+      - "8501:8501"
+
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      WEBHOOK_URL: http://localhost:5678/
+      # necessario para os nos lerem $env (segredo, chave da Groq, etc.)
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      PAINEL_API_URL: http://api:8000
+      PAINEL_WORKER_SECRET: ${WORKER_SECRET:?defina WORKER_SECRET no .env}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      CARROSSEL_WEBHOOK_URL: ${CARROSSEL_WEBHOOK_URL:-}
+      CARROSSEL_API_TOKEN: ${CARROSSEL_API_TOKEN:-}
+    volumes:
+      - dados_n8n:/home/node/.n8n
+      - ./scripts:/opt/painel/scripts:ro
+      - dados_jobs:/data/jobs
+    depends_on:
+      - api
+    ports:
+      - "5678:5678"
+
+volumes:
+  dados_postgres:
+  dados_n8n:
+  dados_jobs:
