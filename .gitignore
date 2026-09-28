@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.DS_Store
+.cache/
+.claude/worktrees/
+.worktrees/
+.next/
+__pycache__/
+.venv/
+venv/
+.claude/worktrees/readme-painel-carrossel/
